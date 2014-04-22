@@ -109,4 +109,4 @@ class FileReader(object):
                     dictionary[k] = self.massage_out[k](dictionary[k])
         vals = [dictionary[key] for key in
                 filter(lambda x: x[:7] != 'padding', self.format.keys())]
-        return self.struct.pack(vals)
+        return self.struct.pack(*vals)
