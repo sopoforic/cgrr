@@ -103,10 +103,13 @@ class FileReader(object):
 
     def pack(self, dictionary):
         # See the comment on unpack.
+        out = {}
         if self.massage_out:
             for k in dictionary:
                 if k in self.massage_out:
-                    dictionary[k] = self.massage_out[k](dictionary[k])
-        vals = [dictionary[key] for key in
+                    out[k] = self.massage_out[k](dictionary[k])
+                else:
+                    out[k] = dictionary[k]
+        vals = [out[key] for key in
                 filter(lambda x: x[:7] != 'padding', self.format.keys())]
         return self.struct.pack(*vals)
