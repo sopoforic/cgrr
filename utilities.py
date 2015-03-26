@@ -58,13 +58,13 @@ class FileReader(object):
         (a subset of) the variable names from format to functions that massage
         the raw value into a user-friendly format and from said user-friendly
         format back into the raw data required by the file, respectively.
-        
+
         An example input processing function might be:
-        
+
             { 'player_name' : (lambda s: s.strip('\x00')) }
-        
+
         which would strip null padding from a string.
-        
+
         Any variables which are not in the dictionaries will be used as-is.
 
         """
@@ -110,6 +110,8 @@ class FileReader(object):
                     out[k] = self.massage_out[k](dictionary[k])
                 else:
                     out[k] = dictionary[k]
+        else:
+            out = dictionary
         vals = [out[key] for key in
                 filter(lambda x: x[:7] != 'padding', self.format.keys())]
         return self.struct.pack(*vals)
