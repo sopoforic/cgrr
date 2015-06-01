@@ -111,6 +111,14 @@ data = score_reader.pack( {"name" : "Cheater", "score" : 9999} )
 scorefile.write(data)
 ```
 
+What is it good for?
+====================
+
+cgrr.py is used by other modules in the CGRR project. Namely:
+
+* [cgrr-archery](https://github.com/sopoforic/cgrr-archery)
+* [cgrr-dangerousdave](https://github.com/sopoforic/cgrr-dangerousdave)
+
 License
 =======
 
