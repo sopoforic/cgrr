@@ -115,3 +115,7 @@ class FileReader(object):
         vals = [out[key] for key in
                 filter(lambda x: x[:7] != 'padding', self.format.keys())]
         return self.struct.pack(*vals)
+
+class UnsupportedSoftwareException(Exception):
+    """Indicates that the module doesn't support the software passed to it."""
+    pass
