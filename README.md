@@ -100,7 +100,7 @@ scores = score_reader.unpack(data)
 which will produce `scores`, a dictionary with two entries
 
 ```python
-score = {"name" : "SomeName", "score" : 1234}
+scores = {"name" : "SomeName", "score" : 1234}
 ```
 
 Given a dictionary with these entries, `pack` can be used to generate a
