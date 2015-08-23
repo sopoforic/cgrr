@@ -94,11 +94,27 @@ class FileReader(object):
         #
         # which would strip null padding from a string.
         #
+        # Alternatively, processing_function may be a FileReader. In that case,
+        # in massage_in,
+        #
+        #     { 'var' : file_reader }
+        #
+        # is equivalent to
+        #
+        #     { 'var' : file_reader.unpack }
+        #
+        # and corresponsingly file_reader.pack will be called on packing. This
+        # is purely a convenience for the (fairly common) case where a file
+        # format (e.g. a container) includes chunks in another format.
+        #
         # Any variables which are not in the dictionary will be used as-is.
         if self.massage_in:
             for k in dictionary:
                 if k in self.massage_in:
-                    dictionary[k] = self.massage_in[k](dictionary[k])
+                    if callable(self.massage_in[k]):
+                        dictionary[k] = self.massage_in[k](dictionary[k])
+                    else:
+                        dictionary[k] = self.massage_in[k].unpack(dictionary[k])
         return dictionary
 
     def pack(self, dictionary):
@@ -107,7 +123,10 @@ class FileReader(object):
         if self.massage_out:
             for k in dictionary:
                 if k in self.massage_out:
-                    out[k] = self.massage_out[k](dictionary[k])
+                    if callable(self.massage_out[k]):
+                        out[k] = self.massage_out[k](dictionary[k])
+                    else:
+                        out[k] = self.massage_out[k].pack(dictionary[k])
                 else:
                     out[k] = dictionary[k]
         else:
