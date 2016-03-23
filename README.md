@@ -1,11 +1,9 @@
-What is this project?
-=====================
+# What is this project?
 
 cgrr.py holds utility functions used by other modules for parsing game
 resource files.
 
-What does it do?
-================
+# What does it do?
 
 At present, cgrr.py provides three things:
 
@@ -13,8 +11,7 @@ At present, cgrr.py provides three things:
 2. `File`, a namedtuple to be used with `verify`
 3. `FileReader`, a class used for reading files into dictionaries
 
-verify
-------
+## verify
 
 Pass this function a list of files (instances of the `File` namedtuple) and a
 path and it will verify that those files exist in that path. It is intended to
@@ -34,8 +31,7 @@ The call to `verify` above will return `True` iff a file
 `d8fae202edcc48d51a72026cbfbe7fa8`. If `identifying_files` contains multiple
 `File` namedtuples, *all* of the files described in the list must be present.
 
-File
-----
+## File
 
 `File` is simply a namedtuple representing a file. The fields of the namedtuple
 are `path`, `size`, and `md5`.
@@ -54,72 +50,111 @@ separately.
 
 `md5` is the md5 hash of the file.
 
-FileReader
-----------
+## FileReader
 
 FileReader is a factory that produces readers for specific file formats. A
-reader provides two methods, `pack` and `unpack`, used for parsing and unparsing
-data from files. Under the hood, it uses the `struct` module.
+reader provides two methods, `pack` and `unpack`, used for parsing and
+unparsing data from files. Under the hood, it uses the `struct` module.
+
+Construct a file reader with `FileReader(format)`, where `format` is a
+string describing the file format, such as:
 
 ```python
-score_reader = FileReader(
-    format = [
-        ("name", "9s"),
-        ("score", "4s"),
-    ],
-    massage_in = {
-        "name"  : (lambda s: s.decode('ascii').strip()),
-        "score" : (lambda s: int(s.decode('ascii'))),
-    },
-    massage_out = {
-        "name"  : (lambda s: s.ljust(9).encode('ascii')),
-        "score" : (lambda s: str(s).rjust(4).encode('ascii')),
-    },
-)
+score_reader = FileReader("""
+<
+Uint32      score         # Score at index 0x00, before name
+string[16]  name
+options[6]  game_options  # A six byte field with a custom data format
+""")
 ```
+
+The format of each line is
+
+    TYPE VARIABLE_NAME
+
+or
+
+    TYPE[COUNT] VARIABLE_NAME
+
+If COUNT is not specified, it defaults to 1.
+
+Optionally, a line may contain a single character describing the
+endianness of the numbers in the file, in the style of struct. By
+default, little-endian ('<') integers are assumed.
+
+Characters following a pound sign ('#') are treated as comments and
+ignored.
+
+If TYPE is one of the builtin types supported by the struct module (e.g.
+Uint16), it will be processed by struct. For builtin types, COUNT is
+treated as the repeat count for struct: Uint32[4] means four 32-bit
+unsigned integers (16 bytes), and string[4] means a 4 byte string.
+
+Otherwise, TYPE is treated as a user-defined type. Then COUNT is the
+number of bytes occupied by the variable, and the FileReader will look
+for a function named parse_TYPE (e.g. parse_options) when unpacking the
+data. If found, the function will be called with the bytestring as an
+argument and the return value assigned as the value of the variable.
+Similarly, the FileReader will pass the variable to a function named
+unparse_TYPE (e.g. unparse_options) which should return a bytestring of
+length COUNT when packing the data. If those functions are not defined,
+the bytes will be returned as-is.
 
 The `Struct` used by this module can be accessed directly as
 `score_reader.struct`, if desired.
 
-This reader will extract two variables from a 13-byte file: `name`, a nine
-character string, and `score`, an integer of up to four digits stored in text
-form in the file.
+The reader specified above will extract three variables from a 26-byte
+file: `score`, a (little-endian) 32-bit unsigned integer; `name`, a
+16-byte string; and `game_options`, a 6-byte field in a custom format.
 
-The dictionaries `massage_in` and `massage_out` provide functions to parse the
-raw data from the file into a usable form and to unparse the data back into the
-correct raw form.
-
-Given a file containing a single score in the required format, the file can be
-parsed with:
+Given a file in the required format, the file can be parsed with:
 
 ```python
-data = scorefile.read(13)
+data = scorefile.read(26)
 scores = score_reader.unpack(data)
 ```
 
-which will produce `scores`, a dictionary with two entries
+which will produce `scores`, a dictionary with three entries
 
 ```python
-scores = {"name" : "SomeName", "score" : 1234}
+scores = {"name" : "SomeName", "score" : 1234, "game_options" : b'......'}
 ```
 
 Given a dictionary with these entries, `pack` can be used to generate a
 scorefile in the original format.
 
 ```python
-data = score_reader.pack( {"name" : "Cheater", "score" : 9999} )
+data = score_reader.pack( {"name" : "Cheater",
+                           "score" : 9999,
+                           "game_options" : b'......'} )
 scorefile.write(data)
 ```
 
-What is it good for?
-====================
+Since we didn't define `parse_options` and `unparse_options` functions,
+the six bytes devoted to that variable are simply assigned directly. It
+might be more useful to parse the options, however:
 
-cgrr.py is used by other modules in the CGRR project. Namely:
+```python
+def parse_options(b):
+    return { 'option' + str(i) : b[i] for i in range(6) }
 
-* [cgrr-archery](https://github.com/sopoforic/cgrr-archery)
-* [cgrr-dangerousdave](https://github.com/sopoforic/cgrr-dangerousdave)
+def unparse_options(o):
+    return bytes([o['option' + str(i)] for i in range(6)])
+```
 
-License
-=======
+# What is it good for?
+
+cgrr.py is used by other modules in the CGRR project. For example:
+
+* [cgrr-gameboy](https://github.com/sopoforic/cgrr-gameboy), which reads
+    and edits Game Boy ROM headers
+* [cgrr-gamecube](https://github.com/sopoforic/cgrr-gamecube), which reads
+    and edits GameCube GCI files
+* [cgrr-mariospicross](https://github.com/sopoforic/cgrr-mariospicross),
+    which reads and edits puzzles for the Game Boy game Mario's Picross
+* [cgrr-pokemon](https://github.com/sopoforic/cgrr-pokemon), which reads
+    and edits save files for Pokemon games
+
+# License
 
 CGRR is available under the GPL v3 or later. See the file COPYING for details.
