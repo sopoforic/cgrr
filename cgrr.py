@@ -79,6 +79,13 @@ t_ignore_COMMENT = r'\#.*'
 def t_error(t):
     raise ValueError("Bad input: {}".format(t.value))
 
+def p_statement(p):
+    """
+    statement : variable
+    statement : byte_order
+    """
+    p[0] = p[1]
+
 def p_builtin_variable(p):
     """
     variable : BUILTIN NAME
@@ -106,7 +113,7 @@ def p_byteorder(p):
     p[0] = ('_BYTE_ORDER', p[1])
 
 def p_error(p):
-    raise ValueError("Syntax error in input: {}".format(p))
+    raise ValueError("Syntax error in input at line {}, value was {}: {}".format(p.lexer.lineno, p.value, p))
 
 def verify(identifying_files, path):
     """Verifies that the files in identifying_files are present in path.
@@ -208,9 +215,9 @@ class FileReader(object):
             self.massage_out = {}
             self.byte_order = '<'
             for line in format.splitlines():
-                if not line:
+                if not line.strip():
                     continue
-                r = parser.parse(line)
+                r = parser.parse(line.strip())
                 if not r:
                     continue
                 if r[0] == '_BUILTIN':
@@ -222,7 +229,7 @@ class FileReader(object):
                     self.massage_out[r[1][0]] = gs.get('unparse_' + r[0], lambda x: x)
                     f.append(r[1])
             self.format = OrderedDict(f)
-            self.fmt = byte_order + "".join(self.format.values())
+            self.fmt = self.byte_order + "".join(self.format.values())
             self.struct = struct.Struct(self.fmt)
         else:
             self.format = OrderedDict(format)
