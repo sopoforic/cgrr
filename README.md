@@ -1,9 +1,9 @@
-# What is this project?
+# Classic Game Resource Reader
 
-cgrr.py holds utility functions used by other modules for parsing game
+cgrr holds utility functions used by other modules for parsing game
 resource files.
 
-# What does it do?
+## Functions
 
 At present, cgrr.py provides three things:
 
@@ -11,7 +11,7 @@ At present, cgrr.py provides three things:
 2. `File`, a namedtuple to be used with `verify`
 3. `FileReader`, a class used for reading files into dictionaries
 
-## verify
+### verify
 
 Pass this function a list of files (instances of the `File` namedtuple) and a
 path and it will verify that those files exist in that path. It is intended to
@@ -31,7 +31,7 @@ The call to `verify` above will return `True` iff a file
 `d8fae202edcc48d51a72026cbfbe7fa8`. If `identifying_files` contains multiple
 `File` namedtuples, *all* of the files described in the list must be present.
 
-## File
+### File
 
 `File` is simply a namedtuple representing a file. The fields of the namedtuple
 are `path`, `size`, and `md5`.
@@ -50,7 +50,7 @@ separately.
 
 `md5` is the md5 hash of the file.
 
-## FileReader
+### FileReader
 
 FileReader is a factory that produces readers for specific file formats. A
 reader provides two methods, `pack` and `unpack`, used for parsing and
@@ -142,7 +142,7 @@ def unparse_options(o):
     return bytes([o['option' + str(i)] for i in range(6)])
 ```
 
-# What is it good for?
+## Example usage
 
 cgrr.py is used by other modules in the CGRR project. For example:
 
@@ -155,6 +155,6 @@ cgrr.py is used by other modules in the CGRR project. For example:
 * [cgrr-pokemon](https://github.com/sopoforic/cgrr-pokemon), which reads
     and edits save files for Pokemon games
 
-# License
+## License
 
 CGRR is available under the GPL v3 or later. See the file COPYING for details.
