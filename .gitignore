@@ -1,5 +1,8 @@
-__pycache__/
-.eggs/
-cgrr.egg-info/
 parser.out
 parsetab.py
+
+__pycache__/
+.eggs/
+*.egg-info/
+dist/
+build/
