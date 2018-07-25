@@ -20,99 +20,13 @@ import os
 import hashlib
 import struct
 import inspect
-
-import ply.lex as lex
-import ply.yacc as yacc
-
+import logging
 from collections import namedtuple, OrderedDict
 
-tokens = (
-    "BYTE_ORDER",
-    "BUILTIN",
-    "NAME",
-    "COUNT",
-)
+from .parser import lexer as cgrr_lexer, parser as cgrr_parser
+from .offsets_parser import lexer as offsets_lexer, parser as offsets_parser
 
-t_BYTE_ORDER = r'[@=<>!]'
-
-builtin_dict = {
-    'unknown'       : 's',
-    'padding'       : 'x',
-    'Uint8'         : 'B',
-    'int8'          : 'b',
-    'Uint16'        : 'H',
-    'int16'         : 'h',
-    'Uint32'        : 'I',
-    'int32'         : 'i',
-    'Uint64'        : 'L',
-    'int64'         : 'l',
-    'float'         : 'f',
-    'double'        : 'd',
-    'bool'          : '?',
-    'char'          : 'c',
-    'string'        : 's',
-    'pascal_string' : 'p',
-}
-
-def t_BUILTIN(t):
-    """
-    unknown|padding|U?int(?:8|16|32|64)|float|double|bool|char|string|pascal_string
-    """
-    t.value = builtin_dict[t.value]
-    return t
-
-t_NAME = r'[A-Za-z_][A-Za-z0-9_]*'
-
-def t_COUNT(t):
-    r'\[\d+\]'
-    t.value = int(t.value[1:-1])
-    return t
-
-def t_newline(t):
-    r'\n+'
-    t.lexer.lineno += len(t.value)
-
-t_ignore = ' \t'
-t_ignore_COMMENT = r'\#.*'
-
-def t_error(t):
-    raise ValueError("Bad input: {}".format(t.value))
-
-def p_statement(p):
-    """
-    statement : variable
-    statement : byte_order
-    """
-    p[0] = p[1]
-
-def p_builtin_variable(p):
-    """
-    variable : BUILTIN NAME
-    variable : BUILTIN COUNT NAME
-    """
-    if len(p) == 3:
-        p[0] = ('_BUILTIN', (p[2], p[1]))
-    elif len(p) == 4:
-        p[0] = ('_BUILTIN', (p[3], str(p[2]) + p[1]))
-
-def p_userdef_variable(p):
-    """
-    variable : NAME NAME
-    variable : NAME COUNT NAME
-    """
-    if len(p) == 3:
-        p[0] = (p[1], (p[2], 's'))
-    elif len(p) == 4:
-        p[0] = (p[1], (p[3], str(p[2]) + 's'))
-
-def p_byteorder(p):
-    """
-    byte_order : BYTE_ORDER
-    """
-    p[0] = ('_BYTE_ORDER', p[1])
-
-def p_error(p):
-    raise ValueError("Syntax error in input at line {}, value was {}: {}".format(p.lexer.lineno, p.value, p))
+logger = logging.getLogger(__name__)
 
 def verify(identifying_files, path):
     """Verifies that the files in identifying_files are present in path.
@@ -139,39 +53,39 @@ class FileReader(object):
     """Reads files into dictionaries."""
     def __init__(self, format, massage_in=None, massage_out=None, byte_order="<"):
         """Create a reader for a specific file format.
-        
+
         Construct a file reader with FileReader(format), where format is a
         string describing the file format, such as:
-        
+
             FileReader('''
             <
             Uint32      score    # Score at index 0x00, before name
             string[16]  name
             options[6]  options  # A six byte field with a custom data format
             ''')
-        
+
         The format of each line is
-        
+
             TYPE VARIABLE_NAME
-        
+
         or
-        
+
             TYPE[COUNT] VARIABLE_NAME
-        
+
         If COUNT is not specified, it defaults to 1.
-        
+
         Optionally, a line may contain a single character describing the
         endianness of the numbers in the file, in the style of struct. By
         default, little-endian ('<') integers are assumed.
-        
+
         Characters following a pound sign ('#') are treated as comments and
         ignored.
-        
+
         If TYPE is one of the builtin types supported by the struct module (e.g.
         Uint16), it will be processed by struct. For builtin types, COUNT is
         treated as the repeat count for struct: Uint32[4] means four 32-bit
         unsigned integers (16 bytes), and string[4] means a 4 byte string.
-        
+
         Otherwise, TYPE is treated as a user-defined type. Then COUNT is the
         number of bytes occupied by the variable, and the FileReader will look
         for a function named parse_TYPE (e.g. parse_options) when unpacking the
@@ -181,7 +95,7 @@ class FileReader(object):
         unparse_TYPE (e.g. unparse_options) which should return a bytestring of
         length COUNT when packing the data. If those functions are not defined,
         the bytes will be returned as-is.
-        
+
         For compatibility reasons, it is possible to specify FileReaders using
         cgrr 1.1 style lists and dicts. In that case:
 
@@ -198,17 +112,16 @@ class FileReader(object):
 
         An example input processing function might be:
 
-            { 'player_name' : (lambda s: s.strip('\x00')) }
+            { 'player_name' : (lambda s: s.strip('\\x00')) }
 
         which would strip null padding from a string.
 
         Any variables which are not in the dictionaries will be used as-is.
 
         """
+        self.format_def = format
         if isinstance(format, str):
             gs = inspect.currentframe().f_back.f_globals
-            lex.lex()
-            parser = yacc.yacc()
             f = []
             self.massage_in = {}
             self.massage_out = {}
@@ -216,7 +129,7 @@ class FileReader(object):
             for line in format.splitlines():
                 if not line.strip():
                     continue
-                r = parser.parse(line.strip())
+                r = cgrr_parser.parse(line.strip(), lexer=cgrr_lexer)
                 if not r:
                     continue
                 if r[0] == '_BUILTIN':
@@ -237,6 +150,135 @@ class FileReader(object):
             self.struct = struct.Struct(self.fmt)
             self.massage_in = massage_in
             self.massage_out = massage_out
+
+    @classmethod
+    def from_offsets(cls, format_def):
+        """Create a reader by specifying data offsets.
+
+        Construct a file reader with from_offsets(format_def), where format_def
+        is a string describing the file format, such as:
+
+            FileReader.from_offsets('''
+            <
+            0x00 Uint32      score    # Score at index 0x00, before name
+            0x04 string[16]  name
+            0x14 options[6]  options  # A six byte field with a custom data format
+            0x1a EOF
+            ''')
+
+        The format of each line is
+
+            OFFSET TYPE VARIABLE_NAME
+
+        or
+
+            OFFSET TYPE[COUNT] VARIABLE_NAME
+
+        The final line of format_def may be:
+
+            FILE_LENGTH EOF
+
+        OFFSET and FILE_LENGTH must be specified in hexadecimal. The number must
+        begin with '0x' and may use either capital or lowercase, i.e. 0x1a and
+        0x1A are equivalent.
+
+        It is not required to specify offsets in any particular order.
+
+        Optionally, a line may contain a single character describing the
+        endianness of the numbers in the file, in the style of struct. By
+        default, little-endian ('<') integers are assumed.
+
+        For an explanation of the remaining segment of each line, see the
+        documentation for FileReader.
+
+        This function is useful if a file format contains unknown segments,
+        because from_offsets will automatically fill in the unknown segments
+        with dummy variables. So:
+
+            FileReader.from_offsets('''
+            <
+            0x00 Uint32      score    # Score at index 0x00, before name
+            0x04 string[16]  name
+            0x24 options[6]  options  # A six byte field with a custom data format
+            0x50 EOF
+            ''')
+        
+        is equivalent to:
+
+            FileReader('''
+            <
+            Uint32      score   # 0x00-0x03: Score at index 0x00, before name
+            string[16]  name    # 0x04-0x13
+            unknown[16] unk1    # 0x14-0x23
+            options[6]  options # 0x24-0x29: A six byte field with a custom data format
+            unknown[38] unk2    # 0x2a-0x4f
+            ''')
+        
+        The EOF statement is not required, but if not specified, the variable
+        with the highest offset specified will also be presumed to be the end of
+        the file.
+
+        """
+        new_format='<\n'
+        statements = []
+        for line in format_def.splitlines():
+            if not line.strip():
+                continue
+            r = offsets_parser.parse(line.strip(), lexer=offsets_lexer)
+            if r[0] == None:
+                new_format = r[1] + '\n'
+            else:
+                statements.append(r)
+
+        logger.debug("Finished parsing offsets format.")
+
+        statements.sort()
+        position = 0
+        unknowns = 0
+        new_lines = []
+        max_offset_width = len(hex(statements[-1][0]))-2
+
+        for s in statements:
+            if s[0] > position:
+                unknowns += 1
+                new_lines.append((
+                    'unknown[{}]'.format(s[0] - position),
+                    'unk{}'.format(unknowns),
+                    '# 0x{start:0{mow}x}-0x{end:0{mow}x}'.format(
+                        start=position,
+                        end=s[0] - 1,
+                        mow=max_offset_width,
+                    )))
+                position = s[0]
+            if s[1].strip() == 'EOF':
+                break
+            stmt = s[1].split(maxsplit=2)
+            try:
+                stmt_size = struct.calcsize(cgrr_parser.parse(s[1], lexer=cgrr_lexer)[1][1])
+            except:
+                logger.exception("Failed to parse with cgrr_parser: %r", s[1])
+                raise
+            position_comment = '# 0x{start:0{mow}x}-0x{end:0{mow}x}'.format(
+                start=position,
+                end=position + stmt_size - 1,
+                mow=max_offset_width)
+            if len(stmt) == 2:
+                stmt.append(position_comment)
+            else:
+                stmt[2] = position_comment + ': ' + stmt[2][1:].strip()
+            new_lines.append(stmt)
+            position += stmt_size
+        max_left = max(len(s[0]) for s in new_lines)
+        max_mid = max(len(s[1]) for s in new_lines)
+        for l in new_lines:
+            new_format += "{left:<{max_left}} {mid:<{max_mid}} {right}\n".format(
+                left=l[0],
+                mid=l[1],
+                right=l[2],
+                max_left=max_left,
+                max_mid=max_mid)
+        logger.debug("from_offsets completed. New format: \n\n%s", new_format)
+        return cls(new_format)
 
     def unpack(self, data):
         vals = self.struct.unpack(data)
