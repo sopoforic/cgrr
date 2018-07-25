@@ -31,7 +31,6 @@ tokens = (
     "BUILTIN",
     "NAME",
     "COUNT",
-    "COMMENT",
 )
 
 t_BYTE_ORDER = r'[@=<>!]'
