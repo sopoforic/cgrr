@@ -174,7 +174,7 @@ class FileReader(object):
 
             OFFSET TYPE[COUNT] VARIABLE_NAME
 
-        The final line of format_def may be:
+        or
 
             FILE_LENGTH EOF
 
@@ -251,7 +251,7 @@ class FileReader(object):
                     )))
                 position = s[0]
             if s[1].strip() == 'EOF':
-                break
+                continue
             stmt = s[1].split(maxsplit=2)
             try:
                 stmt_size = struct.calcsize(cgrr_parser.parse(s[1], lexer=cgrr_lexer)[1][1])

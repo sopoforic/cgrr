@@ -3,7 +3,7 @@
 cgrr holds utility functions used by other modules for parsing game
 resource files.
 
-## Functions
+## Package contents
 
 At present, cgrr.py provides three things:
 
@@ -141,6 +141,80 @@ def parse_options(b):
 def unparse_options(o):
     return bytes([o['option' + str(i)] for i in range(6)])
 ```
+
+#### FileReader.from_offsets
+
+If you know the offsets of data in a file, but not necessarily the format of the
+whole file, the `from_offsets` constructor may be more useful.
+
+Construct a file reader with `from_offsets(format_def)`, where `format_def` is a
+string describing the file format, such as:
+
+```python
+FileReader.from_offsets('''
+<
+0x00 Uint32      score    # Score at index 0x00, before name
+0x04 string[16]  name
+0x14 options[6]  options  # A six byte field with a custom data format
+0x1a EOF
+''')
+```
+
+The format of each line is
+
+    OFFSET TYPE VARIABLE_NAME
+
+or
+
+    OFFSET TYPE[COUNT] VARIABLE_NAME
+
+The final line of format_def may be:
+
+    FILE_LENGTH EOF
+
+OFFSET and FILE_LENGTH must be specified in hexadecimal. The number must
+begin with '0x' and may use either capital or lowercase, i.e. 0x1a and
+0x1A are equivalent.
+
+It is not required to specify offsets in any particular order.
+
+Optionally, a line may contain a single character describing the
+endianness of the numbers in the file, in the style of struct. By
+default, little-endian ('<') integers are assumed.
+
+For an explanation of the remaining segment of each line, see the
+documentation for `FileReader`.
+
+This function is useful if a file format contains unknown segments,
+because `from_offsets` will automatically fill in the unknown segments
+with dummy variables. So:
+
+```python
+FileReader.from_offsets('''
+<
+0x00 Uint32      score    # Score at index 0x00, before name
+0x04 string[16]  name
+0x24 options[6]  options  # A six byte field with a custom data format
+0x50 EOF
+''')
+```
+
+is equivalent to:
+
+```python
+FileReader('''
+<
+Uint32      score   # 0x00-0x03: Score at index 0x00, before name
+string[16]  name    # 0x04-0x13
+unknown[16] unk1    # 0x14-0x23
+options[6]  options # 0x24-0x29: A six byte field with a custom data format
+unknown[38] unk2    # 0x2a-0x4f
+''')
+```
+
+The EOF statement is not required, but if not specified, the variable
+with the highest offset specified will also be presumed to be the end of
+the file.
 
 ## Example usage
 
